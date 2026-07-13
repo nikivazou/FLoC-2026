@@ -1,0 +1,149 @@
+{-# OPTIONS_GHC -fplugin=LiquidHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE IncoherentInstances   #-}
+
+module Language.Haskell.Liquid.ProofCombinators (
+
+  -- ATTENTION! `Admit` and `(==!)` are UNSAFE: they should not belong the final proof term
+
+  -- * Proof is just a () alias
+  Proof
+  , toProof
+
+  -- * Proof constructors
+  , trivial, unreachable, (***), QED(..)
+
+  -- * Proof certificate constructors
+  , (?)
+
+  -- * These two operators check all intermediate equalities
+  , (===) -- proof of equality is implicit eg. x === y
+  , (=<=) -- proof of equality is implicit eg. x <= y
+  , (=>=)  -- proof of equality is implicit eg. x =>= y
+
+  -- * This operator does not check intermediate equalities
+  , (==.)
+
+  -- Uncheck operator used only for proof debugging
+  , (==!) -- x ==! y always succeeds
+
+  -- * Combining Proofs
+  , (&&&)
+  , impossible
+
+) where
+
+-------------------------------------------------------------------------------
+-- | Proof is just a () alias -------------------------------------------------
+-------------------------------------------------------------------------------
+
+type Proof = ()
+
+toProof :: a -> Proof
+toProof _ = ()
+
+-------------------------------------------------------------------------------
+-- | Proof Construction -------------------------------------------------------
+-------------------------------------------------------------------------------
+
+-- | trivial is proof by SMT
+
+trivial :: Proof
+trivial =  ()
+
+-- {-@ unreachable :: {v : Proof | False } @-}
+unreachable :: Proof
+unreachable =  ()
+
+-- All proof terms are deleted at runtime.
+{- RULE "proofs are irrelevant" forall (p :: Proof). p = () #-}
+
+-- | proof casting
+-- | `x *** QED`: x is a proof certificate* strong enough for SMT to prove your theorem
+-- | `x *** Admit`: x is an unfinished proof
+
+infixl 3 ***
+{-@ assume (***) :: a -> p:QED -> { if (isAdmit p) then false else true } @-}
+(***) :: a -> QED -> Proof
+_ *** _ = ()
+
+data QED = Admit | QED
+
+{-@ measure isAdmit @-}
+isAdmit :: QED -> Bool
+isAdmit Admit = True
+isAdmit QED   = False
+
+
+-------------------------------------------------------------------------------
+-- | * Checked Proof Certificates ---------------------------------------------
+-------------------------------------------------------------------------------
+
+infixl 3 ===
+{-@ (===) :: x:a -> y:{a | y == x} -> {v:a | v == x && v == y} @-}
+(===) :: a -> a -> a
+_ === y  = y
+
+infixl 3 =<=
+{-@ (=<=) :: x:a -> y:{a | x <= y} -> {v:a | v == y} @-}
+(=<=) :: a -> a -> a
+_ =<= y  = y
+
+infixl 3 =>=
+{-@ (=>=) :: x:a -> y:{a | x >= y}  -> {v:a | v == y} @-}
+(=>=) :: a -> a -> a
+_ =>= y  = y
+
+-------------------------------------------------------------------------------
+-- | `?` is basically Haskell's $ and is used for the right precedence
+-------------------------------------------------------------------------------
+
+infixl 3 ?
+
+{-@ (?) :: forall a b <pa :: a -> Bool, pb :: b -> Bool>. a<pa> -> b<pb> -> a<pa> @-}
+(?) :: a -> b -> a
+x ? _ = x
+{-# INLINE (?)   #-}
+
+-------------------------------------------------------------------------------
+-- | Assumed equality
+-------------------------------------------------------------------------------
+
+infixl 3 ==!
+{-@ assume (==!) :: x:a -> y:a -> {v:a | v == x && v == y} @-}
+(==!) :: a -> a -> a
+(==!) _ y = y
+
+-------------------------------------------------------------------------------
+-- | * Unchecked Proof Certificates -------------------------------------------
+-------------------------------------------------------------------------------
+
+infixl 3 ==.
+
+{-# INLINE (==.) #-}
+(==.) :: a -> a -> a
+_ ==. x = x
+
+-------------------------------------------------------------------------------
+-- | * Combining Proof Certificates -------------------------------------------
+-------------------------------------------------------------------------------
+
+(&&&) :: Proof -> Proof -> Proof
+x &&& _ = x
+
+
+
+{-@ impossible :: {v:a | false} -> b @-}
+impossible :: a -> b
+impossible _ = undefined
+
+-------------------------------------------------------------------------------
+-- | Convenient Syntax for Inductive Propositions
+-------------------------------------------------------------------------------
+
+{-@ measure prop :: a -> b           @-}
+{-@ type Prop E = {v:_ | prop v = E} @-}
+
+{-@ type Ix typ E = {v:typ | prop v = E} @-}
