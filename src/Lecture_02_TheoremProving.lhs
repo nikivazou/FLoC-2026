@@ -54,7 +54,29 @@ Most of the equational steps can be simplified by
 PLE ([Proof by Logical Evaluation](https://dl.acm.org/doi/10.1145/3158141))!
 
 
-Let's now prove the take-drop reconstruction property 
+Let's now see the other direction: left identity.
+
+\begin{code}
+{-@ leftId :: xs:[a] -> { ([] ++ xs) == xs } @-}
+leftId :: [a] -> ()
+leftId = undefined
+\end{code}
+
+
+For completeness (of the append monoid laws), 
+let's also prove associativity.
+
+\begin{code}
+{-@ assoc :: xs:[a] -> ys:[a] -> zs:[a] 
+          -> { (xs ++ ys) ++ zs == xs ++ (ys ++ zs) } @-}
+assoc :: [a] -> [a] -> [a] -> ()
+assoc = undefined
+\end{code}
+
+
+
+Now, back to our goal, 
+let's prove the take-drop reconstruction property 
 (`take` and `drop` are defined as before, but now reflected!)
 
 
@@ -206,6 +228,15 @@ they can be simplified using PLE and the proof combinators library.
 
 A last question, that we are touching in the next part is: 
 how expressive are the properties that we can prove?
+
+With respect to type theory (e.g., Rocq and Agda), 
+refinement types miss two key things: 
+
+1. large elimination (pattern matching on types) and 
+
+2. inductive predicates (proof constructors, potentially non computable).
+
+Let's see how we can encode the second! 
 
 
 

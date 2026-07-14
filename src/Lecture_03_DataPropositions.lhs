@@ -17,40 +17,282 @@ module Lecture_03_DataPropositions where
 import Prelude hiding ((.))
 import Language.Haskell.Liquid.ProofCombinators
 
-{-@ reflect id @-}
-{-@ reflect $  @-}
 {-@ infix $    @-}
-
-{-@ reflect .  @-}
 {-@ infix .    @-}
-infixr 9 .
-(.) :: (b -> c) -> (a -> b) -> a -> c
-(.) f g x = f (g x)
+\end{code}
+
+This lecture describes [data propositions](https://dl.acm.org/doi/pdf/10.1145/3632912)
+a feature of Liquid Haskell that mimics Rocq's inductive predicates. 
+We present them if three steps. 
+We start with simple refined data types.
+Then, we present the simplest data proposition, that encodes `Even` numbers. 
+Finally, we present a more complex example, 
+that encodes the semantics of a stack machine.
+
+
+Refined Data Types
+--------------------
+
+Liquid Haskell allows to write invariants on data types.
+As an example, consider a data type encoding the date. 
+
+\begin{code}
+
+data Date = Date
+  { day   :: Int
+  , month :: Int
+  , year  :: Int
+  }
+\end{code}
+
+We could like to enforce that the day is between 1 and 31, 
+the month is between 1 and 12, and the year is positive.
+Liquid Haskell enforces these invariants with a refined data definition:
+
+\begin{code}
+
+{-@ data Date = Date
+  { day   :: {v:Int | 1 <= v && v <= 31}
+  , month :: {v:Int | 1 <= v && v <= 12}
+  , year  :: {v:Int | 0 < v}
+  }
+@-}
+\end{code}
+
+The refined data definition is 
+internally converted into refined types for the data constructor `Date`:
+
+~~~{.spec}
+Date :: {v:Int | 1 <= v && v <= 31} 
+     -> {v:Int | 1 <= v && v <= 12} 
+     -> {v:Int | 0 < v} 
+     -> Date
+~~~
+
+In other words, by using refined input types for `Date` 
+we have automatically converted it into a *smart* constructor 
+that ensures that every instance of a `Date` is legal. 
+Consequently, LiquidHaskell verifies:
+
+\begin{code}
+{-@ goodDate :: Date @-}
+goodDate :: Date
+goodDate = Date 15 7 2026
+\end{code}
+
+But it rejects a `badDate`:
+
+\begin{code}
+{-@ ignore badDate @-}
+{-@ badDate :: Date @-}
+badDate :: Date
+badDate = Date 7 15 2026
+\end{code}
+
+Such kind of invariants appear often in programs 
+to, for example, encode dependencies between data fields,
+sizes or properties of data structures, like red-black trees, heaps, etc.
+
+
+
+Data Propositions: Even Numbers
+------------
+
+Using refined data types we encode data propositions, 
+that essentially axiomatize the behavior of 
+predicates in the data type definitions, without actually giving 
+a Haskell definition.
+
+They are very similar to Rocq's 
+[inductive predicates](http://adam.chlipala.net/cpdt/html/Predicates.html).
+Thus, let's look at the using the textbook example of even numbers.
+
+First, we define the data type of natural numbers.
+
+\begin{code}
+data N = Z | S N 
+\end{code}
+
+Then, we _axiomatize_ the proposition that a number is even.
+
+\begin{code}
+data EVEN where 
+    E0 :: EVEN 
+    E2 :: N -> EVEN -> EVEN
+
+data Eveness = EVEN N 
+
+{-@ data EVEN where 
+     E0 :: Prop (EVEN Z)
+     E2 :: n:N -> Prop (EVEN n) -> Prop (EVEN (S (S n))) @-}
+\end{code}
+
+The two constructors `E0` and `E2` axiomatize the evenness of numbers.
+`E0` states that `Z` is even and `E2` states that if `n` is even, 
+then `S (S n)` is also even.
+
+The definition is using the `Prop` type, 
+that converts expressions into proof objects.
+
+\begin{code}
+
+{-@ measure prop :: a -> b           @-}
+{-@ type Prop E = {v:_ | prop v = E} @-}
+
+\end{code}
+
+Further, it requires the unrefined `Even` Haskell definition 
+as well as an `EVEN` data constructor.
+
+
+There are two important points in this construction. 
+
+- First, there is no function that computes evens, thus 
+there is _no termination check_, meaning, that using data propositions 
+one can encode non-terminating computations. 
+
+- Second, the data proposition `EVEN` is a _proof object_,
+thus an `Even` value, gives us information _how_ the proof was constructed.
+
+
+
+Construction of Even Numbers
+----------------------------
+
+Let's construct some even numbers using the `EVEN` data proposition.
+
+\begin{code}
+even0, even2, even4 :: EVEN
+{-@ even0 :: Prop (EVEN Z) @-}
+even0 = undefined 
+
+{-@ even2 :: Prop (EVEN (S (S Z))) @-}
+even2 = undefined
+
+{-@ even4 :: Prop (EVEN (S (S (S (S Z))))) @-}
+even4 = undefined
+\end{code}
+
+**Question:** Fill in the above definitions to construct the even numbers `0`, `2`, and `4`.
+
+<details>
+<summary>**Solution**</summary>
+<p> _The terms are defined as follows:_</p>
+
+~~~{.spec}
+even0 = E0
+even2 = E2 Z even0
+even4 = E2 (S (S Z)) even2
+~~~
+</details>
+
+
+Since `EVEN` is a proof object one can inspect it, 
+to, for example, show contradictions. 
+
+\begin{code}
+even1_false :: EVEN -> () 
+{-@ even1_false :: Prop (EVEN (S Z)) -> {v:() | false} @-}
+even1_false _ = undefined
+\end{code}
+
+**Question:** Show that `S Z` is not even, by inspection. 
+
+<details>
+<summary>**Solution**</summary>
+<p> _The term is defined as follows:_</p>
+
+~~~{.spec}
+even1_false E0       = ()
+even1_false (E2 n p) = even1_false p
+~~~
+</details>
+
+
+Functions on Even Numbers
+-------------------------
+
+As a first function on even numbers, let's define a function that
+takes a non zero, even number and returns its predecessor.
+That is, each even number, 
+other than `0`, can be written as `2 + n`, for some `n`.
+
+\begin{code}
+even_plus_2 :: N -> EVEN -> (N,()) 
+{-@ even_plus_2 :: n:{N | n /= Z} 
+                -> Prop (EVEN n) 
+                -> (m::N, {v:() | n == S (S m)}) @-}
+even_plus_2 _ _ = undefined 
+\end{code}
+
+**Question:** Fill in the definition of the `even_plus_2` function.
+
+<details>
+<summary>**Solution**</summary>
+<p> _The term is defined as follows:_</p>
+
+~~~{.spec}
+even_plus_2 _ (E2 n _) = (n,()) 
+~~~
+</details>
+
+
+As a final exercise, 
+let's show that the sum of two even numbers is also even.
+
+To do so, we first define the `plus` function:
+
+\begin{code}
+{-@ reflect plus @-}
+plus :: N -> N -> N
+plus Z     m = m
+plus (S n) m = S (plus n m)
+\end{code}
+
+**Question:** Fill in the definition of the `even_plus` function.
+
+\begin{code}
+even_plus :: N -> N -> EVEN -> EVEN -> EVEN 
+{-@ even_plus :: n:N -> m:N 
+              -> Prop (EVEN n) -> Prop (EVEN m) 
+              -> Prop (EVEN (plus n m)) @-}
+even_plus _ _ _ _ = undefined 
 \end{code}
 
 
-In this last part, we explore the expresivity of refinement types. 
-The two main limitations are 
+<details>
+<summary>**Solution**</summary>
+<p> _The term is defined as follows:_</p>
 
-1. the encoding of inductive data types, and
-
-2. the reasoning about higher-order functions.
-
-The example of this lecture is based on 
-the [PLEX paper](https://dl.acm.org/doi/epdf/10.1145/3798248) and collects 
-all the steps which with Liquid Haskell's solver extends the SMT logic. 
-
-
-The goal is to explain the
-running example: [a correct-by-construction compiler](https://www.cambridge.org/core/journals/journal-of-functional-programming/article/calculating-correct-compilers/70AA17724EBCA4182B1B2B522362A9AF?utm_campaign=shareaholic&utm_medium=copy_link&utm_source=bookmark) from arithmetic
-expressions to a stack machine.
+~~~{.spec}
+even_plus Z m pn pm 
+  = pm 
+even_plus n m pn@(E2 _ pn') pm 
+  = E2 (plus n' m) (even_plus n' m pn' pm)
+  where (n',_) = even_plus_2 n pn 
+~~~
+</details>
 
 
 
-Refinement Types: Calculating Correct Compilers
+
+Case Study: A Correct-by-Construction Compiler
 ---------------------------------------------------
 
-We start with a small expression language.
+Data propositions are very useful to encode the semantics of programs.
+In this last part, we show how to use data propositions to encode 
+the semantics of a stack machine.
+
+This example is presented in [PLEX OOPSLA'26 paper](https://dl.acm.org/doi/epdf/10.1145/3798248) 
+that extends Liquid Haskell's PLE solver with higher-order reasoning.
+It is based on the [correct-by-construction compiler](https://www.cambridge.org/core/journals/journal-of-functional-programming/article/calculating-correct-compilers/70AA17724EBCA4182B1B2B522362A9AF?utm_campaign=shareaholic&utm_medium=copy_link&utm_source=bookmark)
+previously mechanized in Agda. 
+
+
+
+
+**Expression Language:**
+The source of the compiler is a simple expression language:
 
 \begin{code}
 
@@ -77,20 +319,7 @@ eval (ENeg e)     = - (eval e)
 \end{code}
 
 
-The `reflect` annotation is what connects the Haskell definition to the logic.
-When Liquid Haskell sees it, it:
-
-1. creates a logical symbol for `eval`;
-2. checks that `eval` terminates;
-3. gives the definition of `eval` to PLE.
-
-So later, when a refinement mentions `eval (EAdd e1 e2)`, PLE can unfold it to
-`eval e1 + eval e2`, and the SMT solver can reason about the arithmetic.
-
-
-The Stack Machine
------------------
-
+**The Stack Machine:**
 The target language is a stack machine with three instructions.
 
 \begin{code}
@@ -154,7 +383,7 @@ A stack-machine program is essentially a list of opcodes. But for a
 correct-by-construction compiler, a plain list is too weak. We want the program
 to carry its semantics in its type.
 
-Concretely:
+Concretely, we will use data propositions to index programs by their semantics: 
 
 \begin{code}
 data PROGRAM = Program (Stack -> Stack)
@@ -164,16 +393,7 @@ data PROGRAM = Program (Stack -> Stack)
 The index is a function from stacks to stacks. A value of type `Program p`
 represents a program whose semantics is the stack transformer `p`.
 
-Liquid Haskell encodes such indexed values with data propositions:
-
-\begin{code}
-
-{-@ measure prop :: a -> b           @-}
-{-@ type Prop E = {v:_ | prop v = E} @-}
-
-\end{code}
-
-Using data propositions, we give the program constructors the following
+The indexed program constructors the following
 shape:
 
 \begin{code}
@@ -182,7 +402,8 @@ data Program where
 {-@ PNil :: Prop (Program id) @-}
   PNil :: Program
 {-@ PCons :: op:OpCode
-          -> p:(Stack -> { v:Stack | len v >= minStackSize op }) -> Prop (Program p)
+          -> p:(Stack -> { v:Stack | len v >= minStackSize op }) 
+          -> Prop (Program p)
           -> Prop (Program (execOpCode op . p)) @-}
   PCons :: OpCode -> (Stack -> Stack) -> Program -> Program
 
@@ -194,12 +415,9 @@ Read the constructors as follows.
 `PNil` is the empty program. It performs no operations, so its semantics is
 `id`.
 
-`PCons op p rest` adds instruction `op` after a program whose semantics is `p`.
+`PCons op p rest` adds the instruction `op` after a program whose semantics is `p`.
 The resulting semantics is:
-
-~~~~~{.spec}
-execOpCode op . p
-~~~~~
+`execOpCode op . p`.
 
 The type also checks that `p` produces enough stack elements for `op`.
 
@@ -211,9 +429,9 @@ Now we can write a function that composes two stack programs.
 
 \begin{code}
 {-@ reflect compose @-}
-{-@ compose :: p1:(Stack -> Stack) -> p2:(Stack -> Stack)
-            -> Prop (Program p1) -> Prop (Program p2)
-            -> Prop (Program (p2 . p1)) @-}
+{-@ compose :: s1:(Stack -> Stack) -> s2:(Stack -> Stack)
+            -> Prop (Program s1) -> Prop (Program s2)
+            -> Prop (Program (s2 . s1)) @-}
 compose :: (Stack -> Stack) -> (Stack -> Stack) -> Program -> Program -> Program
 compose s1 s2 p1 PNil                   = p1
 compose s1 s2 p1 (PCons cmd srest rest) =
@@ -224,192 +442,46 @@ compose s1 s2 p1 (PCons cmd srest rest) =
 The specification says that if `p1` has semantics `s1` and `p2` has semantics
 `s2`, then `compose s1 s2 p1 p2` has semantics `s2 . s1`.
 
-This is where vanilla PLE gets stuck. The proof is not just about unfolding
-recursive functions. It needs reasoning about functions as values.
-
-
-The PNil Branch
----------------
-
-The interesting case is the `PNil` branch:
-
-~~~~~{.spec}
-compose s1 s2 p1 PNil = p1
-~~~~~
-
-The expected result type is:
-
-~~~~~{.spec}
-Prop (Program (s2 . s1))
-~~~~~
-
-But the returned expression `p1` has type:
-
-~~~~~{.spec}
-Prop (Program s1)
-~~~~~
-
-Why is this okay? Because in the `PNil` branch, pattern matching tells us that
-`p2` is the empty program. Since `p2` was assumed to have semantics `s2`, and
-`PNil` has semantics `id`, we learn locally:
-
-~~~~~{.spec}
-s2 == id
-~~~~~
-
-So the target semantics:
-
-~~~~~{.spec}
-s2 . s1
-~~~~~
-
-should simplify to:
-
-~~~~~{.spec}
-id . s1 == s1
-~~~~~
-
-Therefore `p1` is exactly the right result. The problem is that this reasoning
-uses higher-order equality and a local equality learned from pattern matching.
-A first-order SMT solver does not do this by itself.
-
-
-The PLEX Algorithm
-----------------------
-
-Next we explain how PLEX proves the `PNil` branch.
-
-The subtyping goal is:
+The verification requires reasoning about higher-order functions. 
+In the `PNil` branch, we need to show that 
 
 ~~~~~{.spec}
 Prop (Program s1) <: Prop (Program (s2 . s1))
 ~~~~~
 
-under the local facts produced by the branch:
 
-~~~~~{.spec}
-prop p1 == Program s1
-prop p2 == Program s2
-prop p2 == Program id
-~~~~~
+To automate such higher order reasoning, 
+the PLEX algorithm extends Liquid Haskell's PLE solver with beta, eta, unfolding, and local unification.
 
-The SMT solver can see that `s2` and `id` are related through the equalities
-about `prop p2`, but it still cannot conclude that `s2 . s1` is the same
-function as `s1`.
+<div class="figure"
+     id="fig:plex-algorithm"
+     caption="Overview of the PLEX algorithm."
+     file="img/PLEX.png"
+     height="360px">
+</div>
 
-PLEX adds the missing higher-order normalization steps.
+Assumptions 1-3 are introduced by the standard verification condition generation.
+4 and 5 are $\eta$-expansions. 
+6 and 8 are function unfolding and 7 is (dependent pattern matching) unification. 
+Once all these steps are collected, 
+SMT's congruence can easily discharge the goal.
 
+In the PLEX paper, we show how higher order steps and 
+dependent pattern matching are implemented in Liquid Haskell.
 
-Step 1: Eta and Beta Equalities
--------------------------------
-
-PLEX eta-expands functions so they can be compared by their behavior on an
-argument.
-
-For example:
-
-~~~~~{.spec}
-s1       == \x -> s1 x
-s2 . s1  == \x -> (s2 . s1) x
-~~~~~
-
-This turns function equality into equality of fully applied terms.
-
-PLEX also supports beta reduction:
-
-~~~~~{.spec}
-(\x -> e) y == e[y/x]
-~~~~~
-
-These equalities are not added as unsafe axioms. PLEX introduces them in a
-typed and controlled way, so the generated terms respect refinements.
-
-
-Step 2: Function Unfolding
---------------------------
-
-Once the composed function is applied to an argument, PLE-style unfolding can
-expand function composition:
-
-~~~~~{.spec}
-(s2 . s1) x == s2 (s1 x)
-~~~~~
-
-This is the point where ordinary PLE and the new higher-order reasoning work
-together. Eta expansion creates the fully applied term, and unfolding simplifies
-that term.
-
-
-Step 3: Unification from Pattern Matching
------------------------------------------
-
-In the `PNil` branch, pattern matching gives us:
-
-~~~~~{.spec}
-prop p2 == Program s2
-prop p2 == Program id
-~~~~~
-
-Since the `Program` constructor is injective, PLEX can learn the local unifier:
-
-~~~~~{.spec}
-s2 == id
-~~~~~
-
-Then it can rewrite:
-
-~~~~~{.spec}
-s2 (s1 x) == id (s1 x)
-~~~~~
-
-This equality is local to the branch. PLEX records such equalities in a delta
-environment.
-
-
-Step 4: Completing the Branch
------------------------------
-
-Finally, PLEX unfolds `id`:
-
-~~~~~{.spec}
-id (s1 x) == s1 x
-~~~~~
-
-Putting the equalities together:
-
-~~~~~{.spec}
-(s2 . s1) x
-== s2 (s1 x)
-== id (s1 x)
-== s1 x
-~~~~~
-
-So:
-
-~~~~~{.spec}
-s2 . s1 == s1
-~~~~~
-
-and therefore:
-
-~~~~~{.spec}
-Prop (Program s1) <: Prop (Program (s2 . s1))
-~~~~~
-
-The `PNil` branch verifies.
-
-The inductive `PCons` branch follows the same idea, but with one more layer of
-composition. PLEX again combines eta expansion, beta reduction, unfolding, and
-local unification.
 
 
 Arithmetic for Free: Completing the Compiler
 ------------------------------------------------
 
-After `compose` is verified, we can define the compiler so that correctness is
-guaranteed by its type.
+After `compose` is verified, 
+we  define a correct by construction compiler.
 
-The intended type is:
+The correctness is guaranteed by the type signature of compile,
+which asserts that the semantics of the compiled program 
+is equal to pushing on top ofthe stack the evaluation of 
+the given expression.
+
 
 \begin{code}
 {-@ compile :: e:Expr -> Prop (Program (push $ eval e)) @-}
@@ -439,17 +511,8 @@ compile (ENeg e)     =
 \end{code}
 
 
-This compiler is correct by construction. Each branch returns a `Program` whose
-semantic index is exactly `push (eval e)`.
-
-PLEX handles the higher-order part:
-
-* composition of stack transformers;
-* eta expansion of partially applied functions;
-* beta reduction of lambdas;
-* unification from pattern matching on data propositions.
-
-The SMT solver handles the arithmetic part. For example, in the `ENeg` case,
+The proof is very similar to the proof in Agda, 
+but the SMT solver handles the arithmetic part. For example, in the `ENeg` case,
 the compiler implements negation by multiplying by `-1`; the arithmetic proof
 that `-a == a * (-1)` is discharged by SMT automation.
 
@@ -457,15 +520,28 @@ that `-a == a * (-1)` is discharged by SMT automation.
 Summary
 -------
 
-We show the complete steps of the PLEX algorithm, 
-which extends Liquid Haskell's solver  with higher-order reasoning. Concretely,
+We saw invariants on data types 
+and how they naturally lead to data propositions.
+Yet, data propositions can be used to encode semantic indices 
+that, in turn, require higher-order reasoning.
 
-1. We want a correct-by-construction compiler.
-2. Correctness is encoded in the type of stack-machine programs.
-3. Program types are indexed by functions from stacks to stacks.
-4. Composition of programs requires higher-order reasoning.
-5. Vanilla PLE unfolds functions, but does not reason enough about functions as
-   values.
-6. PLEX adds beta, eta, unfolding, and local unification.
-7. After that normalization, SMT can finish the remaining first-order goals.
+PLEX permits higher order reasoning, integrated with SMT automation,
+expanding the expressive power of refinement types; 
+that can still be used to verify shallow properties of 
+programs. 
 
+
+
+
+
+
+
+\begin{code}
+{-@ reflect id @-}
+{-@ reflect $  @-}
+
+{-@ reflect .  @-}
+infixr 9 .
+(.) :: (b -> c) -> (a -> b) -> a -> c
+(.) f g x = f (g x)
+\end{code}

@@ -94,7 +94,7 @@ For the `2` case, the subtyping succeeds:
 ~~~{.spec}
                                forall v. v = 2 => v != 0
                            --------------------------------
-   0:{v:Int | v = 2 }    {v:Int | v = 2 } <: {v:Int | v != 0}   
+   2:{v:Int | v = 2 }    {v:Int | v = 2 } <: {v:Int | v != 0}   
  -------------------------------------------------------------
                 2 :: {v:Int | v != 0} 
 ~~~
@@ -123,7 +123,7 @@ Now let's use `take`:
 \begin{code}
 
 test1 :: [Int] -> Int -> [Int]
-test1 xs i = take i xs
+test1 xs i = undefined -- take i xs
 
 \end{code}
 
@@ -168,7 +168,8 @@ and _terminating_ (i.e., recursive call is on a smaller input)
 Dually, let's define the `drop` function.
 
 \begin{code}
-{-@ drop :: i:Nat -> xs:{[a] | i < len xs} -> [a] @-}
+{-@ drop :: i:Nat -> xs:{[a] | i < len xs} 
+         -> {os:[a] | len os = len xs - i} @-}
 drop :: Int -> [a] -> [a]
 drop = undefined 
 \end{code}
@@ -178,11 +179,11 @@ Using `take` and `drop` we can now define the `chunk` function that splits a lis
 
 \begin{code}
 
-chunk :: Int -> [a] -> [[a]]
-chunk i xs | length xs <= i || i <= 1 
+chunk :: [a] -> Int -> [[a]]
+chunk xs i | length xs <= i || i <= 1 
   = [xs]
-chunk i xs 
-  = take i xs : chunk i (drop i xs)
+chunk xs i 
+  = take i xs : chunk (drop i xs) i
 \end{code}
 
 Liquid Haskell gives a termination error! 
@@ -212,4 +213,4 @@ For example, can we now prove that `take` and `drop` reconstruct the original li
 forall i. xs.  xs == take i xs ++ drop i xs 
 ~~~
 
-Yes, using [theorem proving](https://nikivazou.github.io/floc26/TheoremProving.html)! 
+Yes, using [theorem proving](https://nikivazou.github.io/floc26/Lecture_02_TheoremProving.html)! 
