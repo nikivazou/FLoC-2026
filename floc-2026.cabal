@@ -1,0 +1,30 @@
+cabal-version: 2.4
+
+name:           floc2026
+version:        0.1.0.0
+synopsis:       Lectures for Liquid Haskell 
+category:       Education
+homepage:       https://github.com/nikivazou/FLoC-2026
+author:         Niki Vazou
+maintainer:     niki.vazou@imdea.org
+copyright:      Niki Vazou
+license:        MIT
+build-type:     Simple
+
+extra-source-files:
+    README.md
+
+library
+  exposed-modules:
+      Lecture_01_RefinementTypes
+    , Lecture_02_TheoremProving
+    , Lecture_03_DataPropositions
+  other-modules:
+      Language.Haskell.Liquid.ProofCombinators
+  hs-source-dirs:
+      src
+  default-language: Haskell2010
+  build-depends:
+      base             >= 4.11 && < 5
+    , liquidhaskell
+    , containers
