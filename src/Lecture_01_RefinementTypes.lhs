@@ -23,7 +23,6 @@ and turn on the `Liquid Haskell plugin`, but uncommenting the following line:
 
 \begin{code}
 
-{-# OPTIONS_GHC -fplugin=LiquidHaskell #-}
 module Lecture_01_RefinementTypes where
 import Prelude hiding (replicate, take, drop)
 \end{code}
