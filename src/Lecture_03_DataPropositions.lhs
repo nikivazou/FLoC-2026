@@ -89,6 +89,18 @@ badDate :: Date
 badDate = Date 7 15 2026
 \end{code}
 
+
+When doing pattern matching, the invariants are retrieved: 
+
+\begin{code}
+
+{-@ getDay :: Date -> {v:Int | 1 <= v && v <= 31} @-}
+getDay :: Date -> Int
+getDay (Date d _ _) = d
+
+\end{code}
+
+
 Such kind of invariants appear often in programs 
 to, for example, encode dependencies between data fields,
 sizes or properties of data structures, like red-black trees, heaps, etc.
@@ -427,6 +439,9 @@ Reasoning About Higher-Order Indices
 
 Now we can write a function that composes two stack programs.
 
+The specification says that if `p1` has semantics `s1` and `p2` has semantics
+`s2`, then `compose s1 s2 p1 p2` has semantics `s2 . s1`.
+
 \begin{code}
 {-@ reflect compose @-}
 {-@ compose :: s1:(Stack -> Stack) -> s2:(Stack -> Stack)
@@ -438,20 +453,13 @@ compose s1 s2 p1 (PCons cmd srest rest) =
   PCons cmd (srest . s1) (compose s1 srest p1 rest)
 \end{code}
 
-
-The specification says that if `p1` has semantics `s1` and `p2` has semantics
-`s2`, then `compose s1 s2 p1 p2` has semantics `s2 . s1`.
-
-The verification requires reasoning about higher-order functions. 
-In the `PNil` branch, we need to show that 
+In the `PNil` branch, verification reduces to the subtyping check:
 
 ~~~~~{.spec}
 Prop (Program s1) <: Prop (Program (s2 . s1))
 ~~~~~
 
-
-To automate such higher order reasoning, 
-the PLEX algorithm extends Liquid Haskell's PLE solver with beta, eta, unfolding, and local unification.
+Which in turn reduces to the following verification condition:
 
 <div class="figure"
      id="fig:plex-algorithm"
@@ -479,7 +487,7 @@ we  define a correct by construction compiler.
 
 The correctness is guaranteed by the type signature of compile,
 which asserts that the semantics of the compiled program 
-is equal to pushing on top ofthe stack the evaluation of 
+is equal to pushing on top of the stack the evaluation of 
 the given expression.
 
 
